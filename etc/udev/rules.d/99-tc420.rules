@@ -1,0 +1,7 @@
+### Copy this file into /etc/udev/rules.d
+# sudo cp ./99-tc420.rules /etc/udev/rules.d/
+# sudo udevadm control --reload-rules
+### Add your user into plugdev group
+# sudo adduser your_user_name plugdev
+### Logout and login to apply new group setting
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0888", ATTRS{idProduct}=="4000", GROUP="plugdev", MODE="0664"
