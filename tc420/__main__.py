@@ -151,50 +151,41 @@ def clear_all_modes(ctx: Context):
     check_result(ctx.obj.dev.mode_clear_all())
 
 
+@cmd_group.command(short_help='Fast Play a custom program without saving it to the device.')
 @click.option("--name", "-n", type=str, help="The name of the play mode. "
               "(It will be written on the device screen)", required=True,
               metavar="<MODE NAME>")
 @click.option("--steps", "-s", "steps", multiple=True, required=True,
               type=(
                   float,
-                  click.IntRange(0, 100),
-                  click.IntRange(0, 100),
-                  click.IntRange(0, 100),
-                  click.IntRange(0, 100),
-                  click.IntRange(0, 100),
+                  click.IntRange(-100, 100),
+                  click.IntRange(-100, 100),
+                  click.IntRange(-100, 100),
+                  click.IntRange(-100, 100),
+                  click.IntRange(-100, 100),
               ),
               metavar="<DURATION sec> <CH1 %> <CH2 %> <CH3 %> <CH4 %> <CH5 %>",
-              help="Step data: e.g.: 1.5 100 99 50 0 70")
-@cmd_group.command()
+              help="Step data: e.g.: 1.5 100 99 50 0 -70"
+              "\n\nNegative channel values are \"jump\" (immediate) values.")
 @click.pass_context
 def play(ctx: Context, name: str, steps: Tuple[Tuple[float, int, int, int, int, int]]):
     """
-    Play a custom program without saving it to the device.
+    "Fast" Play a custom program without saving it to the device.
+    In play mode you specify the time for fading into the new channel values instead of wall clock time.
+
+    It is useful for e.g. Test your imagined program without waiting a whole day or testing effects, colors...
 
     You can place multiple --steps option to create a complete scene.
     """
     print(f"Initialize playing '{name}'...", end=" ", flush=True)
 
-    step_idx = 0
-    to_sleep = 0.0
-
     ctx.obj.mode_stop_neded = True
 
-    def callback():
+    def adapter(step_idx: int):
         """ Callback to give the next step """
-        nonlocal step_idx, to_sleep
         try:
-            if to_sleep:
-                sleep(to_sleep)
-            print("OK.")
-
             try:
-                step = steps[step_idx]
-                to_sleep = step[0]
-                step_idx += 1
-                print(f" - Playing ({step_idx}): {step} ...", end=" ", flush=True)
-                return step[1:]
-
+                return steps[step_idx]
             except IndexError:
                 return None  # Stop iteration
 
@@ -202,7 +193,16 @@ def play(ctx: Context, name: str, steps: Tuple[Tuple[float, int, int, int, int, 
             print("Cancelled.")
             return None  # Stop iteration
 
-    ctx.obj.dev.play(name=name, callback=callback)
+    def onchange_callback(idx: int, elapsed_time: float, channels: Tuple[int, int, int, int, int]):
+        print(f"\rPlaying (CTRL+C to exit)... Idx: {idx:2}, time: {elapsed_time:4.1f}, "
+              f"CH1: {channels[0]:3}, CH2: {channels[1]:3}, CH3: {channels[2]:3}, "
+              f"CH4: {channels[3]:3}, CH5: {channels[4]:3}\r", end="", flush=True)
+
+    try:
+        ctx.obj.dev.play(name=name, adapter=adapter, onchange_callback=onchange_callback)
+        print("")
+    except KeyboardInterrupt:
+        print("\rCancelled." + " " * 87)
 
 
 @cmd_group.command()
@@ -235,7 +235,7 @@ def demo(ctx: Context, channel_mask: Tuple[int, int, int, int, int]):
     timers = [0.0] * 5
     started = False
 
-    def callback():
+    def adapter(_):
         """ Callback to give the next step """
         nonlocal started
 
@@ -243,41 +243,41 @@ def demo(ctx: Context, channel_mask: Tuple[int, int, int, int, int]):
             started = True
             print("OK.")
 
-        try:
-            changed = False
+        changed = False
 
-            while not changed:
-                for i in range(5):
-                    sleep(0.0001)
-                    timers[i] -= 0.0001   # Decrease timer
+        while not changed:
+            for i in range(5):
+                timers[i] -= 0.0001   # Decrease timer
 
-                    if timers[i] <= 0:  # If a channel timer is elapsed
-                        changed = True
-                        # If a channel reached its end value
-                        channels[i] += 1 if directions[i] == 1 else -1
-                        if channel_mask[i] == 0:  # Channel masking support
-                            channels[i] = 0
-                        if channels[i] <= 0:
-                            channels[i] = 0
-                            directions[i] = 1  # Change direction
-                            sleeps[i] = rand_sleep()  # Change speed
-                        elif channels[i] >= 100:
-                            channels[i] = 100
-                            directions[i] = 0  # Change direction
-                            sleeps[i] = rand_sleep()  # Change speed
+                if timers[i] <= 0:  # If a channel timer is elapsed
+                    changed = True
+                    # If a channel reached its end value
+                    channels[i] += 1 if directions[i] == 1 else -1
+                    if channel_mask[i] == 0:  # Channel masking support
+                        channels[i] = 0
+                    if channels[i] <= 0:
+                        channels[i] = 0
+                        directions[i] = 1  # Change direction
+                        sleeps[i] = rand_sleep()  # Change speed
+                    elif channels[i] >= 100:
+                        channels[i] = 100
+                        directions[i] = 0  # Change direction
+                        sleeps[i] = rand_sleep()  # Change speed
 
-                        timers[i] = sleeps[i]  # Restart timer
+                    timers[i] = sleeps[i]  # Restart timer
 
-            print(f"\rPlaying (CTRL+C to exit)... CH1: {channels[0]:3}, CH2: {channels[1]:3}, CH3: {channels[2]:3}, "
-                  f"CH4: {channels[3]:3}, CH5: {channels[4]:3}\r", end="", flush=True)
+        return [0.0001, ] + channels
 
-            return channels
+    def onchange(_, __, channels):
+        print(f"\rPlaying (CTRL+C to exit)... CH1: {channels[0]:3}, CH2: {channels[1]:3}, CH3: {channels[2]:3}, "
+              f"CH4: {channels[3]:3}, CH5: {channels[4]:3}\r", end="", flush=True)
 
-        except KeyboardInterrupt:
-            print("\rCancelled." + " " * 66)
-            return None  # Stop iteration
-
-    ctx.obj.dev.play(name="Demo", callback=callback)
+    try:
+        ctx.obj.dev.play(name="Demo", adapter=adapter, onchange_callback=onchange)
+        print("")
+    except KeyboardInterrupt:
+        print("\rCancelled." + " " * 66)
+        return None  # Stop iteration
 
 
 @cmd_group.resultcallback()
@@ -293,6 +293,7 @@ def finalize(ctx: Context, _):
 
 
 def main():
+    # Start command group
     cmd_group()
 
 

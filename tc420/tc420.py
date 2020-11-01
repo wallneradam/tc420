@@ -18,6 +18,7 @@ from typing import Callable, Tuple, Union
 import usb.core
 from datetime import datetime, time
 from struct import pack, unpack
+from time import time as timestamp
 
 from threading import Thread
 
@@ -217,11 +218,11 @@ class ModeStepPacket(TC420Packet):
 
         self.add_uchar(step_data[0].hour)
         self.add_uchar(step_data[0].minute)
-        self.add_uchar(step_data[1])  # CH1
-        self.add_uchar(step_data[2])  # CH2
-        self.add_uchar(step_data[3])  # CH3
-        self.add_uchar(step_data[4])  # CH4
-        self.add_uchar(step_data[5])  # CH5
+        self.add_uchar(min(100, abs(step_data[1])))  # CH1
+        self.add_uchar(min(100, abs(step_data[2])))  # CH2
+        self.add_uchar(min(100, abs(step_data[3])))  # CH3
+        self.add_uchar(min(100, abs(step_data[4])))  # CH4
+        self.add_uchar(min(100, abs(step_data[5])))  # CH5
         # The last byte represents the fade/jump flags
         self.add_uchar(jump_flags)
 
@@ -274,11 +275,11 @@ class PlaySetChannels(TC420Packet):
         super().__init__()
 
         self.add_uchar(0xf5)  # It is 0xf5 in PLED.exe, but it seems has no effect et all
-        self.add_uchar(step_data[0])  # CH1
-        self.add_uchar(step_data[1])  # CH2
-        self.add_uchar(step_data[2])  # CH3
-        self.add_uchar(step_data[3])  # CH4
-        self.add_uchar(step_data[4])  # CH5
+        self.add_uchar(min(100, abs(step_data[0])))  # CH1
+        self.add_uchar(min(100, abs(step_data[1])))  # CH2
+        self.add_uchar(min(100, abs(step_data[2])))  # CH3
+        self.add_uchar(min(100, abs(step_data[3])))  # CH4
+        self.add_uchar(min(100, abs(step_data[4])))  # CH5
         self.add_uchar(0)  # Jump flags not working here
 
 
@@ -306,6 +307,8 @@ class TC420:
         self.out_ep = intf[1]  # Output endpoint
 
         self._in_play = False
+        self._play_step_data: Tuple[float, int, int, int, int, int] = None
+        self._play_step_start: int = None
 
     def send(self, packet: TC420Packet, check=True) -> bool:
         """ Send a packet to device and wait for answer """
@@ -368,6 +371,7 @@ class TC420:
         """
         self._in_play = False
         self._play_step_data = None
+        self._play_step_start = None
         return self.send(ModeStopPacket())
 
     def mode_clear_all(self) -> bool:
@@ -376,28 +380,38 @@ class TC420:
         """
         return self.send(ModeClearAllPacket())
 
-    def play_step(self, step_data: Tuple[int, int, int, int, int]) -> bool:
+    def play_step(self, step_data: Tuple[float, int, int, int, int, int]) -> bool:
         """
         Play step if we are in (fast)play mode
         """
-        assert self._in_play, "We are not in play mode"
+        assert self._in_play, "Not in play mode!"
         self._play_step_data = step_data  # It is used in playing thread
+        self._play_step_start = timestamp()
         return True
 
     def play(self, name: str,
-             callback: Callable[[], Union[None, Tuple[int, int, int, int, int]]] = None) -> bool:
+             adapter: Callable[[int], Union[None, Tuple[int, int, int, int, int]]] = None,
+             onchange_callback: Callable[[int, float, Tuple[int, int, int, int, int]], None] = None,
+             wait=True) -> bool:
         """
         Switch to play mode, which is good to try different color level combinations
 
-        When switch is done, the callback is called, where you can return with a tuple containig
-        values for CH1..CH5.
+        When switch is done, the adapter is called (if specified), where you need to return with a
+        tuple of next movement: (duration, CH1, CH2, CH3, CH4, CH5).
+
+        :param name: The name of the fast play mode, it will be written to device LCD
+        :param adapter: The value adapter function (callable)
+        :param onchange_callback: If specified, it will be called with the actual index, elapsed time,
+                                  and channel values
         """
-        assert name
+        assert not self._in_play, "Already in play mode!"
+        assert name, "Ypu must specify a name!"
 
         res = self.send(PlayInitPacket(name))
         assert res, "Switching to play mode was unsuccessfull!"
 
         self._play_step_data = None
+        self._play_step_start = None
         self._in_play = True
 
         def playing_thread():
@@ -405,13 +419,54 @@ class TC420:
             Continuously send actual step data for fast playing to keep it alive
 
             This actually works much better than in PLED.exe. That does not wait for device answer,
-            just sends the same again and again like crazy. The device just sending back a lot of errors.
+            just sends the same again and again like crazy. The device just sending back a lot of errors,
+            and makes a lot of sync issue.
             """
+            idx = 0
+            last_channel_values = [0, 0, 0, 0, 0]
+            cur_channel_values = [0, 0, 0, 0, 0]
+            new_channel_values = [0, 0, 0, 0, 0]
+
             try:
                 while self._in_play:
-                    # Send the actual step data
+                    # Get new data from adapter if specified
+                    if adapter is not None and self._play_step_data is None:
+                        step_data = adapter(idx)
+                        if step_data is None:
+                            break
+                        self.play_step(step_data)
+
                     if self._play_step_data is not None:
-                        self.send(PlaySetChannels(step_data=self._play_step_data))
+                        # The elapsed time
+                        elapsed_time = timestamp() - self._play_step_start
+
+                        # If timer is out
+                        if elapsed_time >= self._play_step_data[0]:
+                            last_channel_values = list(self._play_step_data[1:])
+                            cur_channel_values = last_channel_values
+                            idx += 1
+                            self._play_step_data = None
+
+                        else:
+                            # Calculate new channel values
+                            for c in range(5):
+                                if self._play_step_data[c + 1] < 0:  # Immediate value
+                                    new_channel_values[c] = abs(self._play_step_data[c + 1])
+                                else:  # Linear calculation
+                                    dcv = self._play_step_data[c + 1] - last_channel_values[c]
+                                    new_channel_values[c] = round(last_channel_values[c] + dcv *
+                                                                  (elapsed_time / self._play_step_data[0]))
+                            # Apply new channel values
+                            if new_channel_values != cur_channel_values:
+                                cur_channel_values = new_channel_values
+
+                        # Call onchange callback if values are changed
+                        if onchange_callback:
+                            onchange_callback(idx, elapsed_time, cur_channel_values)
+
+                        # Send current channel values to device
+                        self.send(PlaySetChannels(step_data=cur_channel_values))
+
             except KeyboardInterrupt:
                 pass
 
@@ -419,16 +474,21 @@ class TC420:
         t = Thread(target=playing_thread, daemon=True)
         t.start()
 
-        if callback:
-            # We call the callback until it returns with None
-            while True:
-                play_step_data = callback()
-                if play_step_data is None:
-                    break
+        # Block until thread is ended
+        if wait:
+            try:
+                t.join()
+            except KeyboardInterrupt as e:
+                # Stop on keyboard interrupt
+                self.stop()
+                t.join()  # Wait for thread being stopped
+                raise e
 
-                self.play_step(play_step_data)
+        return True
 
-        return res
+    def stop(self):
+        assert self._in_play, "Not in play mode!"
+        self._in_play = False
 
 
 if __name__ == "__main__":
