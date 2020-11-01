@@ -12,7 +12,7 @@ REQUIREMENTS = (HERE / "requirements.txt").read_text().splitlines()
 # This call to setup() does all the work
 setup(
     name="tc420",
-    version="0.1.1",
+    version="0.2.0",
     description="TC420 LED Controller library and command line interface",
     long_description=README,
     long_description_content_type="text/markdown",
