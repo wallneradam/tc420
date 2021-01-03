@@ -18,7 +18,6 @@ import sys
 import os
 from random import random, randint
 from datetime import datetime
-from time import sleep
 from typing import Callable, Tuple
 
 import click
@@ -107,15 +106,17 @@ def time_sync(ctx: Context):
 @click.option("--step", "-s", "steps", multiple=True, required=True,
               type=(
                   click.DateTime(formats=('%H:%M', '%H.%M', '%H%M')),
-                  click.IntRange(-100, 100),
-                  click.IntRange(-100, 100),
-                  click.IntRange(-100, 100),
-                  click.IntRange(-100, 100),
-                  click.IntRange(-100, 100),
+                  click.IntRange(-101, 100),
+                  click.IntRange(-101, 100),
+                  click.IntRange(-101, 100),
+                  click.IntRange(-101, 100),
+                  click.IntRange(-101, 100),
               ),
               metavar="<TIME> <CH1 %> <CH2 %> <CH3 %> <CH4 %> <CH5 %>",
               help="Step data: e.g.: 13:00 100 99 50 0 -70"
-              "\n\nNegative channel values are \"jump\" (immediate) values.")
+              "\n\nNegative channel values are \"jump\" (immediate) values, but because -0 is not "
+              "interpretable, jump values are shifted by one. So -1 will be 0, -2 will be 1 ... and "
+              "-101 will be 100.")
 def mode(ctx: Context, name: str, bank: int, steps: Tuple[Tuple[datetime, int, int, int, int, int]]):
     """
     Create (or modify) mode(s) (program).
@@ -158,15 +159,17 @@ def clear_all_modes(ctx: Context):
 @click.option("--steps", "-s", "steps", multiple=True, required=True,
               type=(
                   float,
-                  click.IntRange(-100, 100),
-                  click.IntRange(-100, 100),
-                  click.IntRange(-100, 100),
-                  click.IntRange(-100, 100),
-                  click.IntRange(-100, 100),
+                  click.IntRange(-101, 100),
+                  click.IntRange(-101, 100),
+                  click.IntRange(-101, 100),
+                  click.IntRange(-101, 100),
+                  click.IntRange(-101, 100),
               ),
               metavar="<DURATION sec> <CH1 %> <CH2 %> <CH3 %> <CH4 %> <CH5 %>",
               help="Step data: e.g.: 1.5 100 99 50 0 -70"
-              "\n\nNegative channel values are \"jump\" (immediate) values.")
+              "\n\nNegative channel values are \"jump\" (immediate) values, but because -0 is not "
+              "interpretable, jump values are shifted by one. So -1 will be 0, -2 will be 1 ... and "
+              "-101 will be 100.")
 @click.pass_context
 def play(ctx: Context, name: str, steps: Tuple[Tuple[float, int, int, int, int, int]]):
     """

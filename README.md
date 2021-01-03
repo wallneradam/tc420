@@ -5,7 +5,7 @@ You can found more information on its fun (not official) site: https://www.tc420
 
 I reverse engineered the USB protocol the device uses and wrote this library and CLI tool for making endless possibilities from this device. I successfully implemented all the functions PLED.exe have.
 
-The library is cross platform, works everywhere where [libusb](https://github.com/libusb/libusb) works. But because it is a HID device, and MacOS does not allow to detach kernel drivers of HID devices, on MacOS it is extremely hard to make it work in current form. But I tested on **Windows** and **Linux**, and works fine there. It works on (all kinds of) Raspberry Pi, so it
+The library is cross platform, works everywhere where [libusb](https://github.com/libusb/libusb) works. But because it is a HID device, and MacOS does not allow to detach kernel drivers of HID devices, on MacOS it is extremely hard to make it work in current form. But I tested on **Windows** and **Linux**, and works fine there. It works on (all kinds of) Raspberry Pi.
 (Actually there is a python library for HID devices, so theoretically it is possible to rewrite the lib using hidapi, and then it could work on MacOS as well, pull requests are welcome...)
 
 It has a full featured **CLI**, which can act as a reference for the libray. Also you can use it for automation, or just for fun.

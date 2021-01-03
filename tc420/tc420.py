@@ -214,7 +214,7 @@ class ModeStepPacket(TC420Packet):
             # Negative step value means jump
             if step < 0:
                 jump_flags |= 1 << b
-                step_data[b + 1] = -step
+                step_data[b + 1] = -step - 1
 
         self.add_uchar(step_data[0].hour)
         self.add_uchar(step_data[0].minute)
@@ -451,7 +451,7 @@ class TC420:
                             # Calculate new channel values
                             for c in range(5):
                                 if self._play_step_data[c + 1] < 0:  # Immediate value
-                                    new_channel_values[c] = abs(self._play_step_data[c + 1])
+                                    new_channel_values[c] = abs(self._play_step_data[c + 1]) - 1
                                 else:  # Linear calculation
                                     dcv = self._play_step_data[c + 1] - last_channel_values[c]
                                     new_channel_values[c] = round(last_channel_values[c] + dcv *
