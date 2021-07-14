@@ -19,6 +19,7 @@ import usb.core
 from datetime import datetime, time
 from struct import pack, unpack
 from time import time as timestamp
+import sys
 
 from threading import Thread
 
@@ -298,8 +299,10 @@ class TC420:
             raise NoDeviceFoundError("TC420 device is not found!")
 
         # Detach kernel driver (hidraw0)
-        if self.dev.is_kernel_driver_active(0):
-            self.dev.detach_kernel_driver(0)
+        # Skip this step if Windows, because it is not implemented.
+        if sys.platform != 'win32':
+            if self.dev.is_kernel_driver_active(0):
+                self.dev.detach_kernel_driver(0)
 
         cfg = self.dev[0]
         intf = cfg[(0, 0)]  # Interface - we have only one
