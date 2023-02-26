@@ -283,7 +283,7 @@ def demo(ctx: Context, channel_mask: Tuple[int, int, int, int, int]):
         return None  # Stop iteration
 
 
-@cmd_group.resultcallback()
+@cmd_group.result_callback()
 @click.pass_context
 def finalize(ctx: Context, _):
     """
