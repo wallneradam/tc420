@@ -19,6 +19,7 @@ import usb.core
 from datetime import datetime, time
 from struct import pack, unpack
 from time import time as timestamp
+from time import sleep
 import sys
 
 from threading import Thread
@@ -326,6 +327,9 @@ class TC420:
             # The answer packets are not so well designed, they have no magic, no checksum...
             # It seems in case of error they just repeat the sent package from pos 2.
             res = res_pkt.data_len == 1 and res_pkt.data == self.OK
+
+        # give time for processing even though it returned success, issue #9
+        sleep(0.01)
 
         return res
 
