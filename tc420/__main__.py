@@ -19,6 +19,7 @@ import os
 from random import random, randint
 from datetime import datetime
 from typing import Callable, Tuple
+from time import sleep
 
 import click
 import usb.core
@@ -290,6 +291,7 @@ def finalize(ctx: Context, _):
     Finalize command chain
     """
     if ctx.obj.mode_stop_neded:
+        sleep(0.01)
         # Close mode commands
         print("Finalizing modes...", end=" ", flush=True)
         check_result(ctx.obj.dev.mode_stop())
