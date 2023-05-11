@@ -65,6 +65,7 @@ def cmd_group(ctx: Context):
 
     \b
     tc420-cli {MULTILINE_DIVIDER}
+        device 0 {MULTILINE_DIVIDER}
         time-sync {MULTILINE_DIVIDER}
         mode -n test1 -s 00:00 0 0 0 0 0 -s 12:00 100 100 100 100 100 {MULTILINE_DIVIDER}
         mode -n test2 -s 05:00 10 10 30 0 0 -s 15:05 100 50 50 0 100
@@ -81,6 +82,29 @@ def cmd_group(ctx: Context):
     except usb.core.NoBackendError:
         print("No USB backend is available. Please install \"libusb\" for your platform!")
         sys.exit(1)
+    except NoDeviceFoundError as e:
+        print(str(e), file=sys.stderr)
+        sys.exit(1)
+
+
+@cmd_group.command(short_help="Select 1 of several TC420 devices by index (0 based).")
+@click.pass_context
+@click.argument('index', type=click.IntRange(0,9), required=True,
+                metavar="<DEVICE INDEX>")
+def device(ctx: Context, index: int):
+    """
+    Select the TC420 device by index for following operations.
+    """
+    try:
+        if ctx.obj.mode_stop_neded:
+            sleep(0.01)
+            # Close mode commands
+            print("Finalizing modes...", end=" ", flush=True)
+            check_result(ctx.obj.dev.mode_stop())
+            ctx.obj.mode_stop_neded = False
+
+        print(f"Selecting TC420 #{index} for following operations.", end=" ", flush=True)
+        ctx.obj.dev = TC420(dev_index=index)
     except NoDeviceFoundError as e:
         print(str(e), file=sys.stderr)
         sys.exit(1)

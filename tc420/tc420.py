@@ -293,11 +293,36 @@ class TC420:
 
     timeout = 5000  # msec
 
-    def __init__(self) -> None:
-        # Initialize USB device
-        self.dev = usb.core.find(idVendor=TC420.VENDOR_ID, idProduct=TC420.PRODUCT_ID)
-        if self.dev is None:
-            raise NoDeviceFoundError("TC420 device is not found!")
+    def __init__(self, dev_index: int=None) -> None:
+        """ Initialize one TC420
+            Optional 0-based dev_index selects which one.
+        """
+        if dev_index is None:
+            # compatibility mode, use whatever usb.core reports 1st
+            self.dev = usb.core.find(idVendor=TC420.VENDOR_ID, idProduct=TC420.PRODUCT_ID)
+            if not self.dev:
+                raise NoDeviceFoundError("TC420 device is not found!")
+        else:
+            # Enumerate TC420 devices
+            devices = list(usb.core.find(idVendor=TC420.VENDOR_ID, idProduct=TC420.PRODUCT_ID,
+                                         find_all=True))
+            if not devices:
+                raise NoDeviceFoundError("Found no TC420 device!")
+            if dev_index >= len(devices):
+                raise NoDeviceFoundError(f'TC420 device #{dev_index} not found, only {len(devices)} device(s) present')
+            # Follow the USB bus(es) from TC420 dev to root host to build a
+            # unique path. Devices sorted by these pathes get a
+            # reproducible index (unless you add or re-plug TCs).
+            # TC420 has no serial # to bind to, otherwise this could be used.
+            def usb_path(dev):
+                path = f"{dev.bus:02}:{dev.port_number:02}"
+                if not dev.parent:
+                    return path
+                return usb_path(dev.parent) + '.' + path
+
+            list.sort(devices, key=usb_path)
+            self.dev = devices[dev_index]
+            #print(usb_path(self.dev))
 
         # Detach kernel driver (hidraw0)
         # Skip this step if Windows, because it is not implemented.
